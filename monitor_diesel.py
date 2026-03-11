@@ -16,7 +16,6 @@ def fetch_cre_data():
         "precios": "https://publicacionpremiums.cre.gob.mx/Listado/Precios.xml"
     }
     
-    # Lógica de reintento para superar el error de conexión de la CRE
     res_est, res_pre = None, None
     for i in range(3):
         try:
@@ -28,10 +27,8 @@ def fetch_cre_data():
             time.sleep(3)
     
     if not res_est or res_est.status_code != 200:
-        st.error("El servidor de la CRE está saturado. Reintenta en 1 minuto.")
         return pd.DataFrame()
 
-    # Procesar Estaciones (Filtrado por San Nicolás)
     soup_est = BeautifulSoup(res_est.content, 'xml')
     est_data = []
     for p in soup_est.find_all('place'):
@@ -45,7 +42,6 @@ def fetch_cre_data():
                 'cre_id': p.find('cre_id').text if p.find('cre_id') else "S/N"
             })
     
-    # Procesar Precios (Filtrado por Diésel)
     soup_pre = BeautifulSoup(res_pre.content, 'xml')
     pre_data = []
     for p in soup_pre.find_all('place'):
@@ -56,11 +52,9 @@ def fetch_cre_data():
                 'actualizado': d.get('update_time')
             })
             
-    # Unión y Cálculos Fiscales
     if not est_data or not pre_data: return pd.DataFrame()
     
     df = pd.merge(pd.DataFrame(est_data), pd.DataFrame(pre_data), on='place_id')
-    # Regla de negocio: Precio Neto = Precio / 1.16 (Desglose de IVA)
     df['precio_neto'] = (df['precio_publico'] / 1.16).round(2)
     return df
 
@@ -71,13 +65,11 @@ st.info("Datos oficiales de la CRE (Actualizados según reporte OPE)")
 data = fetch_cre_data()
 
 if not data.empty:
-    # Métricas
     c1, c2, c3 = st.columns(3)
     c1.metric("Precio Promedio", f"${data['precio_publico'].mean():.2f}")
     c2.metric("Mejor Precio", f"${data['precio_publico'].min():.2f}")
     c3.metric("Estaciones", len(data))
 
-    # Mapa
     st.subheader("📍 Ubicación de Estaciones")
     m = folium.Map(location=[25.75, -100.29], zoom_start=13)
     for _, r in data.iterrows():
@@ -88,8 +80,7 @@ if not data.empty:
         ).add_to(m)
     st_folium(m, width=1200, height=400)
 
-    # Tabla Detallada
     st.subheader("📋 Lista de Precios Vigentes")
     st.dataframe(data[['nombre', 'precio_publico', 'precio_neto', 'actualizado', 'cre_id']].sort_values('precio_publico'))
 else:
-    st.warning("No se pudieron cargar los datos. Esto suele ser temporal por
+    st.warning("No se pudieron cargar los datos de la CRE. Reintente en un momento.")
